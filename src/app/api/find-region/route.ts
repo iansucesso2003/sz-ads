@@ -1,30 +1,33 @@
 import { NextResponse } from "next/server";
 
 export async function GET() {
-  const regions = [
-    "us-east-1", "us-west-1", "us-west-2", "us-east-2",
-    "eu-west-1", "eu-west-2", "eu-central-1",
-    "sa-east-1", "ap-southeast-1", "ap-northeast-1", "ap-south-1",
-    "ca-central-1"
-  ];
-
   const ref = "smoqdnecziflyheqplsj";
   const password = "jmqleI3rjzfxvOSt";
   const results: Record<string, string> = {};
 
-  for (const region of regions) {
-    const url = `postgresql://postgres.${ref}:${password}@aws-0-${region}.pooler.supabase.com:6543/postgres`;
+  const urls = [
+    { name: "direct-5432", url: `postgresql://postgres:${password}@db.${ref}.supabase.co:5432/postgres` },
+    { name: "direct-6543", url: `postgresql://postgres:${password}@db.${ref}.supabase.co:6543/postgres` },
+    { name: "pooler-sa-east-1-6543", url: `postgresql://postgres.${ref}:${password}@aws-0-sa-east-1.pooler.supabase.com:6543/postgres` },
+    { name: "pooler-us-east-1-6543", url: `postgresql://postgres.${ref}:${password}@aws-0-us-east-1.pooler.supabase.com:6543/postgres` },
+    { name: "pooler-sa-east-1-5432", url: `postgresql://postgres.${ref}:${password}@aws-0-sa-east-1.pooler.supabase.com:5432/postgres` },
+  ];
+
+  for (const { name, url } of urls) {
     try {
       const { PrismaClient } = await import("@prisma/client");
-      const p = new PrismaClient({ datasourceUrl: url });
-      await p.$queryRaw`SELECT 1`;
+      const p = new PrismaClient({ datasourceUrl: url, log: [] });
+      await Promise.race([
+        p.$queryRaw`SELECT 1`,
+        new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 8000)),
+      ]);
       await p.$disconnect();
-      results[region] = "OK";
-      return NextResponse.json({ working_region: region, url });
+      results[name] = "OK";
+      return NextResponse.json({ working: name, url: url.replace(password, "***") });
     } catch (e: unknown) {
-      results[region] = (e as Error).message?.split("\n")[0] ?? "error";
+      results[name] = (e as Error).message?.split("\n").slice(0,2).join(" ") ?? "error";
     }
   }
 
-  return NextResponse.json({ error: "nenhuma região funcionou", results });
+  return NextResponse.json({ error: "nenhuma URL funcionou", results });
 }
