@@ -59,9 +59,10 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  accounts     Account[]
-  sessions     Session[]
-  memberships  UserOrganization[]
+  accounts          Account[]
+  sessions          Session[]
+  memberships       UserOrganization[]
+  invitationsSent   Invitation[]      @relation("InvitationsSent")
 }
 
 model Organization {
@@ -74,6 +75,24 @@ model Organization {
   members      UserOrganization[]
   adAccounts   AdAccount[]
   conversations Conversation[]
+  invitations  Invitation[]
+}
+
+model Invitation {
+  id             String    @id @default(cuid())
+  organizationId String
+  email          String
+  role           String    @default("member")
+  token          String    @unique @default(cuid())
+  invitedById    String
+  acceptedAt     DateTime?
+  expiresAt      DateTime
+  createdAt      DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invitedBy    User         @relation("InvitationsSent", fields: [invitedById], references: [id])
+
+  @@unique([organizationId, email])
 }
 
 model UserOrganization {

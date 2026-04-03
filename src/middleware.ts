@@ -10,6 +10,12 @@ export default auth((req) => {
   }
 
   const isLoggedIn = !!req.auth;
+  const isPublicPage =
+    req.nextUrl.pathname.startsWith("/demo") ||
+    req.nextUrl.pathname.startsWith("/convite");
+
+  if (isPublicPage) return;
+
   const isAuthPage =
     req.nextUrl.pathname.startsWith("/login") ||
     req.nextUrl.pathname.startsWith("/registro") ||

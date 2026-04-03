@@ -13,6 +13,10 @@ import { AnimatedAIChat } from "@/components/ui/animated-ai-chat";
 import { Megaphone, Target, ImageIcon, BarChart3, Palette, Settings2, Filter, Eye, MousePointer2, DollarSign, Users, TrendingUp, TrendingDown } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AdsSpendChart } from "@/components/ui/ads-spend-chart";
+import { PerformanceHistoryChart } from "@/components/ui/performance-history-chart";
+import { AlertBanner } from "@/components/ui/alert-banner";
+import { computeAlerts } from "@/lib/compute-alerts";
+import { ExportPDFButton } from "@/components/ui/export-pdf-button";
 
 interface Campaign {
   id: string;
@@ -195,11 +199,18 @@ export default function ProjetoPage() {
     );
   }
 
+  const alerts = computeAlerts(insights, campaigns);
+
   return (
     <div className="flex h-full flex-col">
       {/* Métricas da conta */}
       <div className="shrink-0 border-b border-white/10 p-6">
         <div className="mx-auto max-w-4xl">
+          {alerts.length > 0 && (
+            <div className="mb-4">
+              <AlertBanner alerts={alerts} />
+            </div>
+          )}
           <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
             <h2 className="flex items-center gap-2 text-lg font-medium text-white">
               <BarChart3 className="h-5 w-5" />
@@ -220,6 +231,12 @@ export default function ProjetoPage() {
                 ))}
                 </select>
               </div>
+              <ExportPDFButton
+                accountName={projectId}
+                datePreset={datePreset}
+                insights={insights}
+                adsInsights={adsInsights as Parameters<typeof ExportPDFButton>[0]["adsInsights"]}
+              />
               <Link href={`/dashboard/projeto/${projectId}/editar`}>
                 <button
                   type="button"
@@ -351,6 +368,13 @@ export default function ProjetoPage() {
           </div>
         </div>
       )}
+
+      {/* Histórico de performance */}
+      <div className="shrink-0 border-b border-white/10 px-6 py-4">
+        <div className="mx-auto max-w-4xl">
+          <PerformanceHistoryChart projectId={projectId} />
+        </div>
+      </div>
 
       {/* Chat com o agente */}
       <div className="min-h-0 flex-1 flex flex-col overflow-hidden">

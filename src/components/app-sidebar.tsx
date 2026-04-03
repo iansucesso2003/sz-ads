@@ -12,6 +12,7 @@ import {
   Settings2,
   PanelLeftClose,
   PanelLeft,
+  Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -121,6 +122,7 @@ export function AppSidebar({ projects }: AppSidebarProps) {
             </p>
           )}
           {navItem("/dashboard/perfil", "Perfil", <User className="h-4 w-4 shrink-0" />)}
+          {navItem("/dashboard/membros", "Membros", <Users className="h-4 w-4 shrink-0" />)}
         </div>
 
         <div>
