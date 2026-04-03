@@ -30,10 +30,18 @@ export default function OrganizacaoPage() {
   useEffect(() => {
     fetch("/api/organizations")
       .then((r) => r.json())
-      .then(setOrgs)
+      .then((data: Org[]) => {
+        // Auto-select if only one org
+        if (data.length === 1) {
+          document.cookie = `org-id=${data[0].id}; path=/; max-age=${60 * 60 * 24 * 30}`;
+          router.push("/dashboard");
+          return;
+        }
+        setOrgs(data);
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, []);
+  }, [router]);
 
   async function handleSelect(orgId: string) {
     document.cookie = `org-id=${orgId}; path=/; max-age=${60 * 60 * 24 * 30}`;
