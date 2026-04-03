@@ -824,7 +824,7 @@ export function AnimatedAIChat({ projectId, datePreset = "last_7d" }: AnimatedAI
 
               <motion.button
                 type="button"
-                onClick={handleSendMessage}
+                onClick={() => handleSendMessage()}
                 whileHover={{ scale: 1.01 }}
                 whileTap={{ scale: 0.98 }}
                 disabled={isTyping || !value.trim()}
