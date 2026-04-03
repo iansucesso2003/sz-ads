@@ -1,36 +1,69 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Painel de Otimização de Campanhas
 
-## Getting Started
+Agente de IA integrado à Meta Ads para análise de campanhas, conjuntos de anúncios e criativos. Multi-tenant.
 
-First, run the development server:
+## Setup
+
+### 1. Variáveis de ambiente
+
+Copie `.env.example` para `.env` e preencha:
+
+```bash
+cp .env.example .env
+```
+
+**Supabase** – em Project Settings > Database:
+- **DATABASE_URL**: Connection string (URI) – use a versão "Transaction" ou "Session"
+- **DIRECT_URL**: Direct connection – para migrations
+
+**NextAuth**:
+- **AUTH_SECRET**: Gere com `openssl rand -base64 32`
+- **NEXTAUTH_URL**: `http://localhost:3000`
+
+### 2. Banco de dados
+
+Com o `.env` configurado:
+
+```bash
+npx prisma migrate deploy
+```
+
+Ou execute o SQL manualmente:
+```bash
+psql $DIRECT_URL -f prisma/migrations/20240308000000_init/migration.sql
+```
+
+### 3. Rodar o projeto
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Acesse http://localhost:3000
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Deploy na Vercel
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. **Conecte o repositório** em [vercel.com](https://vercel.com) → New Project → importe o repositório Git.
 
-## Learn More
+2. **Configure as variáveis de ambiente** no painel da Vercel (Settings → Environment Variables):
 
-To learn more about Next.js, take a look at the following resources:
+   | Variável        | Descrição                                      |
+   |-----------------|------------------------------------------------|
+   | `DATABASE_URL`  | Connection string Supabase (modo Transaction)  |
+   | `DIRECT_URL`    | Connection string Supabase (modo Session)      |
+   | `AUTH_SECRET`   | `openssl rand -base64 32`                      |
+   | `NEXTAUTH_URL`  | URL de produção (ex: `https://seu-app.vercel.app`) |
+   | `OPENAI_API_KEY`| Chave da API OpenAI (para o chat)              |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+3. **Migre o banco** antes do primeiro deploy:
+   ```bash
+   npx prisma migrate deploy
+   ```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+4. **Deploy** – a Vercel fará o build automaticamente. O script `build` já inclui `prisma generate`.
 
-## Deploy on Vercel
+## Fluxo
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. **Login** – use qualquer email (modo demo)
+2. **Organização** – selecione ou crie uma workspace
+3. **Chat** – converse com o agente de IA
