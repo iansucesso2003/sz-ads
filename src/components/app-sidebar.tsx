@@ -18,14 +18,20 @@ import { cn } from "@/lib/utils";
 
 const SIDEBAR_COLLAPSED_KEY = "app-sidebar-collapsed";
 
-interface AdAccount {
-  id: string;
-  adAccountId: string;
+interface ProjectChannel {
+  platform: string;
   accountName: string | null;
+  adAccountId: string | null;
+}
+
+interface Project {
+  id: string;
+  name: string;
+  channels: ProjectChannel[];
 }
 
 interface AppSidebarProps {
-  projects: AdAccount[];
+  projects: Project[];
 }
 
 export function AppSidebar({ projects }: AppSidebarProps) {
@@ -158,7 +164,7 @@ export function AppSidebar({ projects }: AppSidebarProps) {
                 >
                   <Link
                     href={`/dashboard/projeto/${p.id}`}
-                    title={collapsed ? (p.accountName || p.adAccountId) : undefined}
+                    title={collapsed ? p.name : undefined}
                     className={cn(
                       "flex min-w-0 items-center gap-3",
                       collapsed ? "justify-center" : "flex-1",
@@ -169,7 +175,16 @@ export function AppSidebar({ projects }: AppSidebarProps) {
                   >
                     <FolderKanban className="h-4 w-4 shrink-0" />
                     {!collapsed && (
-                      <span className="truncate">{p.accountName || p.adAccountId}</span>
+                      <span className="flex-1 min-w-0">
+                        <span className="block truncate text-sm">{p.name}</span>
+                        <span className="flex gap-1 mt-0.5">
+                          {p.channels.map((ch) => (
+                            <span key={ch.platform} className={`rounded text-[9px] px-1 py-0 font-medium ${ch.platform === "META" ? "bg-blue-500/20 text-blue-300" : "bg-red-500/20 text-red-300"}`}>
+                              {ch.platform === "META" ? "Meta" : "Google"}
+                            </span>
+                          ))}
+                        </span>
+                      </span>
                     )}
                   </Link>
                   {!collapsed && (

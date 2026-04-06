@@ -4,31 +4,18 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { AppSidebar } from "@/components/app-sidebar";
 
-export default async function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
-  if (!session?.user?.id) {
-    redirect("/login");
-  }
+  if (!session?.user?.id) redirect("/login");
 
   const orgId = (await cookies()).get("org-id")?.value;
-  if (!orgId) {
-    redirect("/organizacao");
-  }
+  if (!orgId) redirect("/organizacao");
 
-  const adAccounts = await prisma.adAccount.findMany({
+  const projects = await prisma.project.findMany({
     where: { organizationId: orgId },
+    include: { channels: { select: { platform: true, accountName: true, adAccountId: true } } },
     orderBy: { createdAt: "desc" },
   });
-
-  const projects = adAccounts.map((a) => ({
-    id: a.id,
-    adAccountId: a.adAccountId,
-    accountName: a.accountName,
-  }));
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#0A0A0B]">
