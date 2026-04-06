@@ -120,7 +120,46 @@ model AdAccount {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  snapshots    CampaignSnapshot[]
+}
+
+// ============ Snapshots de Performance por Projeto ============
+model CampaignSnapshot {
+  id           String   @id @default(cuid())
+  adAccountId  String
+  datePreset   String   // today | last_7d | last_30d | last_90d
+  capturedAt   DateTime @default(now())
+
+  impressions  Float?
+  clicks       Float?
+  spend        Float?
+  reach        Float?
+  cpc          Float?
+  cpm          Float?
+  ctr          Float?
+
+  adAccount    AdAccount   @relation(fields: [adAccountId], references: [id], onDelete: Cascade)
+  adSnapshots  AdSnapshot[]
+
+  // Um snapshot por projeto por datePreset por dia
+  @@unique([adAccountId, datePreset, capturedAt])
+  @@index([adAccountId, datePreset, capturedAt])
+}
+
+model AdSnapshot {
+  id         String           @id @default(cuid())
+  snapshotId String
+  adId       String
+  adName     String
+  spend      Float?
+  clicks     Float?
+  ctr        Float?
+  impressions Float?
+  cpc        Float?
+  cpm        Float?
+
+  snapshot   CampaignSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
 }
 
 // ============ Chat com o Agente ============

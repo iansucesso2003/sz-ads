@@ -91,6 +91,49 @@ Responda APENAS com SIM ou NÃO.`;
   }
 }
 
+interface SnapshotRecord {
+  capturedAt: string;
+  impressions: number | null;
+  clicks: number | null;
+  spend: number | null;
+  reach: number | null;
+  cpc: number | null;
+  cpm: number | null;
+  ctr: number | null;
+}
+
+function buildHistoryContext(snapshots: SnapshotRecord[]): string {
+  if (!snapshots || snapshots.length < 2) return "";
+
+  const lines = snapshots.map((s) => {
+    const date = new Date(s.capturedAt).toLocaleDateString("pt-BR");
+    return `- ${date}: gasto R$${s.spend?.toFixed(2) ?? "?"}, cliques ${s.clicks ?? "?"}, CTR ${s.ctr?.toFixed(2) ?? "?"}%, CPC R$${s.cpc?.toFixed(2) ?? "?"}, CPM R$${s.cpm?.toFixed(2) ?? "?"}, impressões ${s.impressions ?? "?"}, alcance ${s.reach ?? "?"}`;
+  });
+
+  const latest = snapshots[0];
+  const oldest = snapshots[snapshots.length - 1];
+
+  const pct = (curr: number | null, prev: number | null) => {
+    if (!curr || !prev || prev === 0) return null;
+    return (((curr - prev) / Math.abs(prev)) * 100).toFixed(1);
+  };
+
+  const deltas = [
+    latest.ctr != null && oldest.ctr != null ? `CTR ${pct(latest.ctr, oldest.ctr)}%` : null,
+    latest.cpc != null && oldest.cpc != null ? `CPC ${pct(latest.cpc, oldest.cpc)}%` : null,
+    latest.cpm != null && oldest.cpm != null ? `CPM ${pct(latest.cpm, oldest.cpm)}%` : null,
+    latest.spend != null && oldest.spend != null ? `gasto ${pct(latest.spend, oldest.spend)}%` : null,
+    latest.clicks != null && oldest.clicks != null ? `cliques ${pct(latest.clicks, oldest.clicks)}%` : null,
+  ].filter(Boolean);
+
+  return `## Histórico de performance (${snapshots.length} análises anteriores)
+Variação entre a análise mais antiga e a mais recente: ${deltas.join(", ") || "sem dados suficientes"}
+Use esses dados para dizer se a conta está MELHORANDO ou PIORANDO ao longo do tempo.
+
+Snapshots salvos (do mais recente ao mais antigo):
+${lines.join("\n")}`;
+}
+
 function buildContextMessage(context: {
   campaigns?: unknown[];
   adsets?: unknown[];
@@ -99,6 +142,7 @@ function buildContextMessage(context: {
   adsInsights?: unknown[];
   pausedCampaigns?: unknown[];
   pausedAdsets?: unknown[];
+  snapshots?: SnapshotRecord[];
 }) {
   const parts: string[] = [];
 
@@ -218,6 +262,9 @@ function buildContextMessage(context: {
     );
   }
 
+  const historySection = buildHistoryContext(context.snapshots ?? []);
+  if (historySection) parts.push(historySection);
+
   if (parts.length === 0) {
     return "Nenhum dado de campanhas disponível no momento.";
   }
@@ -269,6 +316,7 @@ export async function POST(req: NextRequest) {
       adsInsights?: unknown[];
       pausedCampaigns?: unknown[];
       pausedAdsets?: unknown[];
+      snapshots?: SnapshotRecord[];
     } = {};
 
     const lastMessage = messages[messages.length - 1]?.content ?? "";
@@ -279,20 +327,14 @@ export async function POST(req: NextRequest) {
       const cookie = req.headers.get("cookie") || "";
       const headers: Record<string, string> = cookie ? { Cookie: cookie } : {};
 
-      const [campRes, adsetRes, adRes, insightsRes, adsInsightsRes, pausedRes] = await Promise.all([
-        fetch(
-          `${baseUrl}/api/meta/${projectId}/campaigns`,
-          { headers }
-        ),
+      const [campRes, adsetRes, adRes, insightsRes, adsInsightsRes, pausedRes, snapshotsRes] = await Promise.all([
+        fetch(`${baseUrl}/api/meta/${projectId}/campaigns`, { headers }),
         fetch(`${baseUrl}/api/meta/${projectId}/adsets`, { headers }),
         fetch(`${baseUrl}/api/meta/${projectId}/ads`, { headers }),
-        fetch(`${baseUrl}/api/meta/${projectId}/insights?date_preset=${datePreset}`, {
-          headers,
-        }),
-        fetch(`${baseUrl}/api/meta/${projectId}/ads-insights?date_preset=${datePreset}`, {
-          headers,
-        }),
+        fetch(`${baseUrl}/api/meta/${projectId}/insights?date_preset=${datePreset}`, { headers }),
+        fetch(`${baseUrl}/api/meta/${projectId}/ads-insights?date_preset=${datePreset}`, { headers }),
         fetch(`${baseUrl}/api/meta/${projectId}/paused?date_preset=${datePreset}`, { headers }),
+        fetch(`${baseUrl}/api/meta/${projectId}/snapshot?datePreset=${datePreset}&limit=10`, { headers }),
       ]);
 
       const campData = await campRes.json();
@@ -301,6 +343,7 @@ export async function POST(req: NextRequest) {
       const insightsData = await insightsRes.json();
       const adsInsightsData = await adsInsightsRes.json();
       const pausedData = await pausedRes.json();
+      const snapshotsData = await snapshotsRes.json();
 
       const pausedCampaigns = pausedData.error ? [] : (pausedData.campaigns ?? []);
       const pausedAdsets = pausedData.error ? [] : (pausedData.adsets ?? []);
@@ -313,6 +356,7 @@ export async function POST(req: NextRequest) {
         adsInsights: Array.isArray(adsInsightsData) ? adsInsightsData : adsInsightsData.error ? [] : [],
         pausedCampaigns: Array.isArray(pausedCampaigns) ? pausedCampaigns : [],
         pausedAdsets: Array.isArray(pausedAdsets) ? pausedAdsets : [],
+        snapshots: Array.isArray(snapshotsData) ? snapshotsData : [],
       };
     }
 

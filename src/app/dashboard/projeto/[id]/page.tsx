@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -10,12 +10,14 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { AnimatedAIChat } from "@/components/ui/animated-ai-chat";
-import { Megaphone, Target, ImageIcon, BarChart3, Palette, Settings2, Filter, Eye, MousePointer2, DollarSign, Users, TrendingUp, TrendingDown } from "lucide-react";
+import { Megaphone, Target, ImageIcon, BarChart3, Palette, Settings2, Filter, Eye, MousePointer2, DollarSign, Users } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AdsSpendChart } from "@/components/ui/ads-spend-chart";
 import { PerformanceHistoryChart } from "@/components/ui/performance-history-chart";
 import { AlertBanner } from "@/components/ui/alert-banner";
+import { DeltaBadge } from "@/components/ui/delta-badge";
 import { computeAlerts } from "@/lib/compute-alerts";
+import { calcDelta, type SnapshotMetrics } from "@/lib/snapshot";
 import { ExportPDFButton } from "@/components/ui/export-pdf-button";
 
 interface Campaign {
@@ -101,11 +103,15 @@ export default function ProjetoPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [datePreset, setDatePreset] = useState("last_7d");
+  const [prevSnapshot, setPrevSnapshot] = useState<SnapshotMetrics | null>(null);
+  const snapshotSavedRef = useRef<string>(""); // evita duplo save na mesma sessão
 
   useEffect(() => {
     if (!projectId) return;
 
     setLoading(true);
+    setPrevSnapshot(null);
+
     Promise.allSettled([
       fetch(`/api/meta/${projectId}/campaigns`).then((r) => r.json()),
       fetch(`/api/meta/${projectId}/adsets`).then((r) => r.json()),
@@ -113,22 +119,46 @@ export default function ProjetoPage() {
       fetch(`/api/meta/${projectId}/creatives`).then((r) => r.json()),
       fetch(`/api/meta/${projectId}/insights?date_preset=${datePreset}`).then((r) => r.json()),
       fetch(`/api/meta/${projectId}/ads-insights?date_preset=${datePreset}`).then((r) => r.json()),
-    ]).then(([camp, adset, ad, creatives, insights, adsIns]) => {
+      // Busca snapshot anterior enquanto carrega tudo
+      fetch(`/api/meta/${projectId}/snapshot?datePreset=${datePreset}&limit=2`).then((r) => r.json()),
+    ]).then(([camp, adset, ad, creativesRes, insightsRes, adsInsRes, snapshotsRes]) => {
       const campData = camp.status === "fulfilled" ? camp.value : { error: "Erro" };
       const adsetData = adset.status === "fulfilled" ? adset.value : { error: "Erro" };
       const adData = ad.status === "fulfilled" ? ad.value : { error: "Erro" };
-      const creativesData = creatives.status === "fulfilled" ? creatives.value : { error: "Erro" };
-      const insightsData = insights.status === "fulfilled" ? insights.value : { error: "Erro" };
-      const adsInsData = adsIns.status === "fulfilled" ? adsIns.value : { error: "Erro" };
+      const creativesData = creativesRes.status === "fulfilled" ? creativesRes.value : { error: "Erro" };
+      const insightsData = insightsRes.status === "fulfilled" ? insightsRes.value : { error: "Erro" };
+      const adsInsData = adsInsRes.status === "fulfilled" ? adsInsRes.value : { error: "Erro" };
+      const snapshotsData = snapshotsRes.status === "fulfilled" ? snapshotsRes.value : [];
 
-      if (campData.error) setError(campData.error);
-      else {
+      if (campData.error) {
+        setError(campData.error);
+      } else {
+        const currentInsights: Insights = insightsData.error ? {} : insightsData;
+        const currentAdsIns: Record<string, unknown>[] = Array.isArray(adsInsData) ? adsInsData : [];
+
         setCampaigns(Array.isArray(campData) ? campData : []);
         setAdsets(Array.isArray(adsetData) ? adsetData : adsetData.error ? [] : []);
         setAds(Array.isArray(adData) ? adData : adData.error ? [] : []);
         setCreatives(Array.isArray(creativesData) ? creativesData : creativesData.error ? [] : []);
-        setInsights(insightsData.error ? {} : insightsData);
-        setAdsInsights(Array.isArray(adsInsData) ? adsInsData : adsInsData.error ? [] : []);
+        setInsights(currentInsights);
+        setAdsInsights(currentAdsIns);
+
+        // Snapshot anterior (índice 1 — o segundo mais recente, antes do save de hoje)
+        if (Array.isArray(snapshotsData) && snapshotsData.length >= 1) {
+          const prev = snapshotsData[snapshotsData.length === 1 ? 0 : 1];
+          if (prev) setPrevSnapshot(prev as SnapshotMetrics);
+        }
+
+        // Salva snapshot em background (apenas uma vez por projeto+preset por sessão)
+        const sessionKey = `${projectId}:${datePreset}`;
+        if (snapshotSavedRef.current !== sessionKey && !insightsData.error) {
+          snapshotSavedRef.current = sessionKey;
+          fetch(`/api/meta/${projectId}/snapshot`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ insights: currentInsights, adsInsights: currentAdsIns, datePreset }),
+          }).catch(() => {}); // silencioso — não bloqueia o dashboard
+        }
       }
     }).catch((err) => setError(err.message))
       .finally(() => setLoading(false));
@@ -201,6 +231,16 @@ export default function ProjetoPage() {
 
   const alerts = computeAlerts(insights, campaigns);
 
+  // Deltas vs snapshot anterior
+  const f = (v?: string) => v ? parseFloat(v) : null;
+  const deltaImpressions = calcDelta(f(insights.impressions), prevSnapshot?.impressions);
+  const deltaClicks     = calcDelta(f(insights.clicks),      prevSnapshot?.clicks);
+  const deltaSpend      = calcDelta(f(insights.spend),       prevSnapshot?.spend);
+  const deltaReach      = calcDelta(f(insights.reach),       prevSnapshot?.reach);
+  const deltaCpm        = calcDelta(f(insights.cpm),         prevSnapshot?.cpm);
+  const deltaCtr        = calcDelta(f(insights.ctr),         prevSnapshot?.ctr);
+  const deltaCpc        = calcDelta(f(insights.cpc),         prevSnapshot?.cpc);
+
   return (
     <div className="flex h-full flex-col">
       {/* Métricas da conta */}
@@ -212,10 +252,17 @@ export default function ProjetoPage() {
             </div>
           )}
           <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
-            <h2 className="flex items-center gap-2 text-lg font-medium text-white">
-              <BarChart3 className="h-5 w-5" />
-              Métricas
-            </h2>
+            <div className="flex items-center gap-3">
+              <h2 className="flex items-center gap-2 text-lg font-medium text-white">
+                <BarChart3 className="h-5 w-5" />
+                Métricas
+              </h2>
+              {prevSnapshot && (
+                <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-xs text-white/40">
+                  vs análise anterior
+                </span>
+              )}
+            </div>
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2">
                 <Filter className="h-4 w-4 text-white/50" />
@@ -248,7 +295,9 @@ export default function ProjetoPage() {
               </Link>
             </div>
           </div>
+
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            {/* Impressões */}
             <div className="rounded-xl border border-blue-500/20 bg-blue-500/10 p-4">
               <div className="mb-2 flex items-center justify-between">
                 <p className="text-xs font-medium text-blue-300/70">Impressões</p>
@@ -257,12 +306,18 @@ export default function ProjetoPage() {
                 </div>
               </div>
               <p className="text-2xl font-bold text-white">{formatNumber(insights.impressions)}</p>
-              {insights.cpm && (
-                <p className="mt-1 flex items-center gap-1 text-xs text-blue-300/60">
-                  <TrendingUp className="h-3 w-3" /> CPM {formatCurrency(insights.cpm)}
-                </p>
+              <div className="mt-1 flex items-center justify-between">
+                <p className="text-xs text-blue-300/60">CPM {formatCurrency(insights.cpm)}</p>
+                <DeltaBadge delta={deltaImpressions} metric="impressions" />
+              </div>
+              {deltaCpm && (
+                <div className="mt-0.5 flex items-center gap-1 text-xs text-blue-300/40">
+                  CPM <DeltaBadge delta={deltaCpm} metric="cpm" />
+                </div>
               )}
             </div>
+
+            {/* Cliques */}
             <div className="rounded-xl border border-violet-500/20 bg-violet-500/10 p-4">
               <div className="mb-2 flex items-center justify-between">
                 <p className="text-xs font-medium text-violet-300/70">Cliques</p>
@@ -271,12 +326,18 @@ export default function ProjetoPage() {
                 </div>
               </div>
               <p className="text-2xl font-bold text-white">{formatNumber(insights.clicks)}</p>
-              {insights.ctr && (
-                <p className="mt-1 flex items-center gap-1 text-xs text-violet-300/60">
-                  <TrendingUp className="h-3 w-3" /> CTR {parseFloat(insights.ctr).toFixed(2)}%
-                </p>
+              <div className="mt-1 flex items-center justify-between">
+                <p className="text-xs text-violet-300/60">CTR {insights.ctr ? parseFloat(insights.ctr).toFixed(2) + "%" : "—"}</p>
+                <DeltaBadge delta={deltaClicks} metric="clicks" />
+              </div>
+              {deltaCtr && (
+                <div className="mt-0.5 flex items-center gap-1 text-xs text-violet-300/40">
+                  CTR <DeltaBadge delta={deltaCtr} metric="ctr" />
+                </div>
               )}
             </div>
+
+            {/* Gasto */}
             <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-4">
               <div className="mb-2 flex items-center justify-between">
                 <p className="text-xs font-medium text-emerald-300/70">Gasto</p>
@@ -285,12 +346,18 @@ export default function ProjetoPage() {
                 </div>
               </div>
               <p className="text-2xl font-bold text-white">{formatCurrency(insights.spend)}</p>
-              {insights.cpc && (
-                <p className="mt-1 flex items-center gap-1 text-xs text-emerald-300/60">
-                  <TrendingDown className="h-3 w-3" /> CPC {formatCurrency(insights.cpc)}
-                </p>
+              <div className="mt-1 flex items-center justify-between">
+                <p className="text-xs text-emerald-300/60">CPC {formatCurrency(insights.cpc)}</p>
+                <DeltaBadge delta={deltaSpend} metric="spend" />
+              </div>
+              {deltaCpc && (
+                <div className="mt-0.5 flex items-center gap-1 text-xs text-emerald-300/40">
+                  CPC <DeltaBadge delta={deltaCpc} metric="cpc" />
+                </div>
               )}
             </div>
+
+            {/* Alcance */}
             <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-4">
               <div className="mb-2 flex items-center justify-between">
                 <p className="text-xs font-medium text-amber-300/70">Alcance</p>
@@ -299,6 +366,9 @@ export default function ProjetoPage() {
                 </div>
               </div>
               <p className="text-2xl font-bold text-white">{formatNumber(insights.reach)}</p>
+              <div className="mt-1 flex justify-end">
+                <DeltaBadge delta={deltaReach} metric="reach" />
+              </div>
             </div>
           </div>
 
