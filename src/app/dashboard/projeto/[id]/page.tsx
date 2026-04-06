@@ -439,13 +439,6 @@ export default function ProjetoPage() {
         </div>
       )}
 
-      {/* Histórico de performance */}
-      <div className="shrink-0 border-b border-white/10 px-6 py-4">
-        <div className="mx-auto max-w-4xl">
-          <PerformanceHistoryChart projectId={projectId} />
-        </div>
-      </div>
-
       {/* Chat com o agente */}
       <div className="min-h-0 flex-1 flex flex-col overflow-hidden">
         <AnimatedAIChat
